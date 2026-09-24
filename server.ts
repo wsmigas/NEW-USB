@@ -975,6 +975,101 @@ async function startServer() {
     }
   });
 
+  // Scan reports/ folder on disk and auto-link reports with database records
+  app.post('/api/sync-reports', (req, res) => {
+    try {
+      if (!fs.existsSync(REPORTS_DIR)) {
+        fs.mkdirSync(REPORTS_DIR, { recursive: true });
+      }
+
+      const filesOnDisk = fs.readdirSync(REPORTS_DIR).filter(f => f.toLowerCase().endsWith('.html'));
+      if (filesOnDisk.length === 0) {
+        return res.json({
+          success: true,
+          totalFilesFound: 0,
+          matchedCount: 0,
+          message: 'Nenhum ficheiro .html encontrado na pasta reports/'
+        });
+      }
+
+      const allDiscos = queryAll(db, 'SELECT id, ticket_num, id_disco, numero_serie, arquivo, relatorio_path, total_imagens FROM discos_usb');
+      let matchedCount = 0;
+      const details: any[] = [];
+
+      for (const filename of filesOnDisk) {
+        const filePath = path.join(REPORTS_DIR, filename);
+        let content = '';
+        try {
+          content = fs.readFileSync(filePath, 'utf-8');
+        } catch (_) {
+          continue;
+        }
+
+        const lowerFilename = filename.toLowerCase();
+        const cleanLower = lowerFilename.replace(/[^a-z0-9]/g, '');
+
+        // Extract title and root from HTML header if available
+        const titleMatch = /<title>(.*?)<\/title>/i.exec(content.slice(0, 10000));
+        const reportTitle = (titleMatch ? titleMatch[1] : '').toLowerCase();
+        const rootMatch = /(?:var\s+root\s*=\s*["']([^"']+)["']|root\s*:\s*["']([^"']+)["'])/i.exec(content.slice(0, 10000));
+        const rootPath = (rootMatch ? rootMatch[1] || rootMatch[2] : '').toLowerCase();
+        const fullContentHeader = (reportTitle + ' ' + rootPath).replace(/[^a-z0-9]/g, '');
+
+        const files = parseSnap2Html(content);
+
+        // Find disk
+        let matched = allDiscos.find(d => {
+          if (d.relatorio_path && d.relatorio_path.toLowerCase() === lowerFilename) return true;
+
+          const tClean = (d.ticket_num || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const idClean = (d.id_disco || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const snClean = (d.numero_serie || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          if (tClean && tClean.length >= 4 && cleanLower.includes(tClean)) return true;
+          if (idClean && idClean.length >= 4 && cleanLower.includes(idClean)) return true;
+          if (snClean && snClean.length >= 4 && cleanLower.includes(snClean)) return true;
+
+          if (tClean && tClean.length >= 4 && fullContentHeader.includes(tClean)) return true;
+          if (idClean && idClean.length >= 4 && fullContentHeader.includes(idClean)) return true;
+          if (snClean && snClean.length >= 4 && fullContentHeader.includes(snClean)) return true;
+
+          return false;
+        });
+
+        if (matched) {
+          matchedCount++;
+          const filesJson = JSON.stringify(files);
+          db.run(`
+            UPDATE discos_usb
+            SET relatorio_path = ?,
+                relatorio_files = ?,
+                total_imagens = CASE WHEN total_imagens = 0 OR total_imagens IS NULL THEN ? ELSE total_imagens END
+            WHERE id = ?
+          `, [filename, filesJson, files.length, matched.id]);
+
+          details.push({
+            filename,
+            diskId: matched.id,
+            diskLabel: matched.id_disco || matched.ticket_num,
+            totalFiles: files.length
+          });
+        }
+      }
+
+      saveDatabase(db);
+
+      res.json({
+        success: true,
+        totalFilesFound: filesOnDisk.length,
+        matchedCount,
+        unmatchedCount: filesOnDisk.length - matchedCount,
+        details
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Erro ao sincronizar pasta de relatórios' });
+    }
+  });
+
   // ==========================================
   // VITE DEV SERVER / STATIC MIDDLEWARE
   // ==========================================

@@ -829,6 +829,26 @@ export const StorageService = {
     }
   },
 
+  async syncServerReportsAsync(): Promise<{
+    success: boolean;
+    totalFilesFound: number;
+    matchedCount: number;
+    unmatchedCount: number;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch('/api/sync-reports', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, totalFilesFound: 0, matchedCount: 0, unmatchedCount: 0, error: data.error };
+      }
+      await this.fetchDiscosAsync();
+      return data;
+    } catch (err: any) {
+      return { success: false, totalFilesFound: 0, matchedCount: 0, unmatchedCount: 0, error: err?.message };
+    }
+  },
+
   // Backwards compatible synchronous helper
   parseCSV(content: string): { importedCount: number; errorsCount: number; messages: string[] } {
     this.importCSVAsync(content);

@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "start": "tsx server.ts",
+    "sync-reports": "node -e \"const http=require('http');http.request({hostname:'localhost',port:process.env.PORT||3000,path:'/api/sync-reports',method:'POST'},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>console.log(JSON.parse(d)))}).end()\"",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
