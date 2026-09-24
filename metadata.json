@@ -1,0 +1,6 @@
+{
+  "name": "RIDIS — Registo e Inventário de Discos USB",
+  "description": "Sistema de Gestão e Inventário de Discos USB e Matrizes de Digitalização para a Direção-Geral do Livro, dos Arquivos e das Bibliotecas (DGLAB).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
